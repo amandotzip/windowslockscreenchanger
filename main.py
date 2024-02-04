@@ -1,62 +1,138 @@
-#Downloads top x posts from reddit. Used with Dynamic Wallpaper from Windows and Windows Task Scheduler, 
+# Downloads top x posts from reddit. 
+# Used with Dynamic Wallpaper from Windows and Windows Task Scheduler, 
 # you can automatically update your lockscreen or background wallpaper to reddit wallpapers!
-
-import re
 import requests
 import praw
 import os
-import time
 from datetime import datetime
-from pytz import timezone
 import glob
+from PIL import Image
+from io import BytesIO
+import configparser
 
-#choose sub to draw from
-subreddit = "wallpapers"
-tz = timezone('US/Eastern')
-reddit = praw.Reddit(
-    client_id="Bd83cwSUnsCMtQ",
-    client_secret="q9DWmxnWMzudQYDOB-USk9IMGtK8Pw",
-    user_agent="Image downloader for hot posts on r/Wallpapers"
-)
+def get_current_directory():
+    # Get the directory of the current script
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_absolute_path_for_file(file_name):
+    # Get the directory of the current script
+    current_script_directory = get_current_directory()
+    # Your local path relative to the script directory
+    relative_path = file_name
+    # Construct the absolute path
+    absolute_path = os.path.join(current_script_directory, relative_path)
+    
+    print(absolute_path)
+    return absolute_path
+
+def save_downloaded_images(path_and_filename, response):
+    with open(path_and_filename, "wb") as f:
+        f.write(response.content)
+
+def delete_files_at_path(path):
+    #delete
+    #path will be where you store and update your wallpapers
+    files = glob.glob(path + '*')
+    print("Deleting old wallpapers...")
+    for f in files:
+        os.remove(f)
 
 #Downloads the hottest post (top = hot for this app)
 def get_top_post():
     get_top_x_posts(1)
 
-#Downloads x hottest posts
-def get_top_x_posts(x):
+def process_default(submission, saved_images_path):
+    image_url = submission.url
+    file_name = image_url.split("/")[-1]
+    file_name_dated = date_created + "_" + file_name
+    response = requests.get(image_url)
+    final_file_path = saved_images_path + file_name_dated
+    with open(final_file_path, "wb") as f:
+        f.write(response.content)
+        print("Downloaded: " + final_file_path)
+
+
+def process_gallery(submission, saved_images_path):
+     # Iterate through the media of the submission
+    for media in submission.media_metadata.values():
+        # Check if media type is image
+        if media['e'] == 'Image':
+            # Get the direct URL to the image
+            image_url = media['s']['u']
+            file_name = image_url.split("/")[-1]
+            # Download the image
+            response = requests.get(image_url)
+
+            if response.status_code == 200:
+                # Open the image using PIL
+                content = BytesIO(response.content)
+                img = Image.open(content).convert("RGB")
+                gallery_file_name = file_name.split("?")[0]
+                # Save the image
+                final_file_path = saved_images_path + date_created + "_" + gallery_file_name
+                img.save(final_file_path)
+                print("Downloaded: " + final_file_path)
+            else:
+                print("Failed to fetch the image. Status code:", response.status_code)
+
+
+
+def create_directory(directory_path):
+    """
+    Creates images directory if it doesn't exist
+    """
+    # Check if the directory doesn't exist
+    if not os.path.exists(directory_path):
+        # Create the directory and its parents if they don't exist
+        os.makedirs(directory_path)
+        print(f"Directory '{directory_path}' created successfully.")
+    else:
+        print(f"Directory '{directory_path}' already exists.")
+
+
+def get_top_x_posts(x, saved_images_path):
+    """
+    Downloads x number of hottest posts. 
+    Creates images folder to store them in, deletes all old images in folder, 
+    and downloads x number of hottest image posts from the subreddit selected.
+    """
+    saved_images_path = os.path.join(saved_images_path, "images/")
+    create_directory(saved_images_path)
+    delete_files_at_path(saved_images_path)    
+
     # get reddit post
     submission_list = []
     for submission in reddit.subreddit(subreddit).hot(limit=x):
-        submission_list.append(submission.url)
+        submission_list.append(submission)
 
-    #delete
-    #path will be where you store and update your wallpapers
-    path = "your/path/here"
-    files = glob.glob(path + '*')
-    print("Deleting old wallpapers...")
-    for f in files:
-        os.remove(f)
-    
-    # download
+    # Download
     print("Downloading new wallpapers...")
     for submission in submission_list:
-        url = (submission)
-        file_name = url.split("/")
-        if len(file_name) == 0:
-            file_name = re.findall("/(.*?)", url)
-        file_name = file_name[-1]
-
-        if "." not in file_name:
-            file_name += ".jpg"
-        t = time.localtime()
-
-        date_created = datetime.utcnow().strftime('%m-%d-%Y %H-%M-%S.%f')[:-5]
-
-        file_name_dated = date_created + file_name[-4:]
-        r = requests.get(url)
-
-        with open(path + file_name_dated, "wb") as f:
-            f.write(r.content)
+        if "gallery/" in submission.url:
+            process_gallery(submission, saved_images_path)
+        else:
+            process_default(submission, saved_images_path)
     print("Done.")
-get_top_x_posts(4)
+
+
+config = configparser.ConfigParser()
+current_directory = os.getcwd()
+
+
+# read config file to locally store sensitive data
+config.read(get_absolute_path_for_file("config.ini"))
+
+# PATH WHERE IMAGES WILL BE SAVED
+saved_images_path = config['LocalPath']['saved_images_path']
+date_created = datetime.utcnow().strftime('%Y-%m-%d')
+
+# Choose subreddit to get images from, also provide your Reddit API client information in a config.ini
+subreddit = "wallpaper"
+reddit = praw.Reddit(
+    client_id=config['Reddit']['client_id'],
+    client_secret=config['Reddit']['client_secret'],
+    user_agent=config['Reddit']['user_agent']
+)
+
+
+get_top_x_posts(4, saved_images_path)
