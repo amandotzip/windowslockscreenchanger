@@ -25,23 +25,20 @@ def get_absolute_path_for_file(file_name):
     print(absolute_path)
     return absolute_path
 
-def save_downloaded_images(path_and_filename, response):
-    with open(path_and_filename, "wb") as f:
-        f.write(response.content)
-
 def delete_files_at_path(path):
-    #delete
-    #path will be where you store and update your wallpapers
+    """deletes all files in folder where wallpapers will be stored"""
     files = glob.glob(path + '*')
     print("Deleting old wallpapers...")
     for f in files:
         os.remove(f)
 
-#Downloads the hottest post (top = hot for this app)
+
 def get_top_post():
+    """Downloads the hottest post (top = hot for this app)"""
     get_top_x_posts(1)
 
 def process_default(submission, saved_images_path):
+    """Takes submission url, downloads, and saves to path. Most submission use this function."""
     image_url = submission.url
     file_name = image_url.split("/")[-1]
     file_name_dated = date_created + "_" + file_name
@@ -53,6 +50,13 @@ def process_default(submission, saved_images_path):
 
 
 def process_gallery(submission, saved_images_path):
+    """
+    Same output as process_default, but approach is different for galleries.
+    Will download all images from a gallery. 
+    
+    See also:
+        :func:`process_default`
+    """
      # Iterate through the media of the submission
     for media in submission.media_metadata.values():
         # Check if media type is image
@@ -81,7 +85,6 @@ def create_directory(directory_path):
     """
     Creates images directory if it doesn't exist
     """
-    # Check if the directory doesn't exist
     if not os.path.exists(directory_path):
         # Create the directory and its parents if they don't exist
         os.makedirs(directory_path)
@@ -116,8 +119,6 @@ def get_top_x_posts(x, saved_images_path):
 
 
 config = configparser.ConfigParser()
-current_directory = os.getcwd()
-
 
 # read config file to locally store sensitive data
 config.read(get_absolute_path_for_file("config.ini"))
