@@ -99,14 +99,21 @@ def get_top_x_posts(x, saved_images_path):
     Creates images folder to store them in, deletes all old images in folder, 
     and downloads x number of hottest image posts from the subreddit selected.
     """
+    print("Getting top posts from subreddit...")
     saved_images_path = os.path.join(saved_images_path, "images/")
     create_directory(saved_images_path)
     delete_files_at_path(saved_images_path)    
-
-    # get reddit post
     submission_list = []
-    for submission in reddit.subreddit(subreddit).hot(limit=x):
-        submission_list.append(submission)
+    processed_ids = set()
+    count = 0
+    while len(submission_list) < x:
+        for submission in reddit.subreddit(subreddit).hot(limit=x + count):
+            if submission.stickied or submission.link_flair_text == "generated-by-ai" or submission.id in processed_ids: # Skip stickied posts, AI generated posts, and duplicates
+                continue
+            if len(submission_list) < x:
+                submission_list.append(submission)
+                processed_ids.add(submission.id)
+        count += 1
 
     # Download
     print("Downloading new wallpapers...")
@@ -115,7 +122,7 @@ def get_top_x_posts(x, saved_images_path):
             process_gallery(submission, saved_images_path)
         else:
             process_default(submission, saved_images_path)
-    print("Done.")
+    print("Download complete.")
 
 
 config = configparser.ConfigParser()
@@ -136,4 +143,12 @@ reddit = praw.Reddit(
 )
 
 
-get_top_x_posts(4, saved_images_path)
+
+
+def main():
+    print("Running wallpaper getter...")
+    get_top_x_posts(4, saved_images_path)
+    print("Done.")
+
+if __name__ == "__main__":
+    main()
